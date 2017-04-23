@@ -1,73 +1,36 @@
-const pg = require('pg')
-const url = require('url')
-const request = require('request')
-const parseString = require('xml2js').parseString
-require('dotenv').config()
+const { readArguments                          } = require('./arguments')
+const { makeRequest                            } = require('./zoopla')
+const { connect, executeQuery, closeConnection } = require('./database')
 
-const args = process.argv
-const place = args[args.length-1]
-if (!place || /\.js$/.test(place)) {
-  console.error('usage: node index.js POSTCODE')
-  process.exit(1)
-}
+const { place, databaseUrl } = readArguments()
 
-const databaseUrl = process.env.DATABASE_URL
-const urlConnectionSettings = url.parse(databaseUrl)
-const [ user, password ] = urlConnectionSettings.auth.split(':')
-const connectionSettings = {
-  user: user,
-  password: password,
-  host: urlConnectionSettings.hostname,
-  port: urlConnectionSettings.port,
-  database: urlConnectionSettings.path.split('/')[1],
-  ssl: true
-}
-
-const client = new pg.Client(connectionSettings)
-
-const insertProperty = listing => {
-  return new Promise((fulfill, reject) => {
-    const onComplete = (err, res) => {
-      if (err) throw err
-      else {
-        console.log('Inserted row')
-        fulfill(res)
-      }
-    }
-    client.query({
-      text: "insert into public.properties (outcode) values ($1)",
-      values: listing.outcode
-    }, onComplete)
+const insertProperty = (client, listing) => 
+  executeQuery(client, {
+    text: "insert into public.properties (outcode) values ($1)",
+    values: listing.outcode
   })
-}
+  .then(() => console.log('Inserted row'))
+  .catch(err => console.error('Failed to insert row', err))
 
-const closeConnection = () => client.end(err => { if (err) throw err })
+const zooplaApiUrl =
+  'http://api.zoopla.co.uk/api/v1/property_listings.xml?postcode=' +
+  place +
+  '&page_size=100&include_sold=1&listing_status=sale&api_key=4psufpf7vmrvpngfrc3zuyqm'
 
-const handleConnection = err => {
-  if (err) throw err
-  request(
-    'http://api.zoopla.co.uk/api/v1/property_listings.xml?postcode=' +
-    place + '&page_size=100&include_sold=1&listing_status=sale&api_key=4psufpf7vmrvpngfrc3zuyqm',
-    (err, response, body) => {
-      if (err || response.statusCode !== 200) throw (err || response.statusCode)
-      console.log('API Response received')
-      parseString(body, (err, result) => {
-        if (err) throw err
-        if (result.response.listing) {
-          const insertions = result.response.listing.map(insertProperty)
-          Promise.all(insertions)
-            .then(() => console.log('All insertions completed successfully'))
-            .catch(() => console.log('Some insertions failed'))
-            .then(closeConnection)
-        }
-        else {
-          console.log('No results returned from API')
-          closeConnection()
-        }
-      })
-    }
+connect(databaseUrl)
+  .then(client => makeRequest(zooplaApiUrl)
+    .then(result => {
+      console.log('Zoopla API response received')
+      if (!result.response.listing) {
+        console.log('No results returned from API')
+      }
+      const insertions = result.response.listing.map(x => insertProperty(client, x))
+      return Promise.all(insertions)
+        .then(() => console.log('All insertions completed successfully'))
+        .catch(() => console.log('Some insertions failed'))
+    })
+    .catch(err => console.error(err))
+    .then(() => closeConnection(client))
   )
-}
-
-client.connect(handleConnection)
+  .catch(err => console.error(err))
 
