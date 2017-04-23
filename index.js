@@ -48,9 +48,11 @@ const handleConnection = err => {
   request(
     'http://api.zoopla.co.uk/api/v1/property_listings.xml?postcode=' +
     place + '&page_size=100&include_sold=1&listing_status=sale&api_key=4psufpf7vmrvpngfrc3zuyqm',
-    (error, response, body) => {
+    (err, response, body) => {
+      if (err || response.statusCode !== 200) throw (err || response.statusCode)
       console.log('API Response received')
       parseString(body, (err, result) => {
+        if (err) throw err
         if (result.response.listing) {
           const insertions = result.response.listing.map(insertProperty)
           Promise.all(insertions)
