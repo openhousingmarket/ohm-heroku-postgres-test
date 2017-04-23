@@ -32,12 +32,14 @@ const handleQueryResult = result => {
 const args = process.argv
 const place = args[args.length-1]
 
-request('http://api.zoopla.co.uk/api/v1/property_listings.xml?postcode=' + place + '&page_size=100&include_sold=1&listing_status=sale&api_key=4psufpf7vmrvpngfrc3zuyqm',
+request(
+  'http://api.zoopla.co.uk/api/v1/property_listings.xml?postcode=' +
+  place + '&page_size=100&include_sold=1&listing_status=sale&api_key=4psufpf7vmrvpngfrc3zuyqm',
   (error, response, body) => {
    parseString(body, (err, result) => {
-     client.query(
-       "insert into public.properties (outcode) values ('" + result.response.listing[0].outcode + "')",
-       handleError(() => client.end(handleError())))
+     for (let i = 0; i < result.response.listing.length; i++) {
+       client.query("insert into public.properties (outcode) values ('" + result.response.listing[i].outcode + "')")
+     }
     })
   })
 
