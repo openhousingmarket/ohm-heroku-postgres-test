@@ -34,7 +34,10 @@ const insertProperty = listing => {
         fulfill(res)
       }
     }
-    client.query("insert into public.properties (outcode) values ('" + listing.outcode + "')", onComplete)
+    client.query({
+      text: "insert into public.properties (outcode) values ($1)",
+      values: listing.outcode
+    }, onComplete)
   })
 }
 
