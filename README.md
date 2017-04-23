@@ -23,6 +23,6 @@ Running the code
 Run
 
 ```
-node index.js
+node index.js POSTCODE
 ```
 
